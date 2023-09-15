@@ -1,0 +1,54 @@
+name: MSYS2 build
+on: [push, pull_request]
+
+env:
+  # FIXME: For some reason enabling jit debugging "fixes" random python crashes
+  # see https://github.com/msys2/MINGW-packages/issues/11864 and
+  # https://gitlab.gnome.org/GNOME/glib/-/merge_requests/3280#note_1678973
+  MSYS: winjitdebug
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        sys:
+          - mingw64
+          - ucrt64
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8ca2b8b2ece13480cda6dacd3511b49857a23c09 # v2.5.1
+        with:
+          egress-policy: audit
+
+      - name: Install dependencies
+        uses: msys2/setup-msys2@7efe20baefed56359985e327d329042cde2434ff # v2
+        with:
+          msystem: ${{matrix.sys}}
+          update: true
+          install: >-
+            git
+            base-devel
+          pacboy: >-
+            gcc:p
+            meson:p
+            pkg-config:p
+
+      - name: Checkout DPDK code
+        uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4.0.0
+        with:
+          repository: 'DPDK/dpdk'
+          path: dpdk
+          clean: true
+
+      - name: Build and install DPDK
+        run: |
+          cd dpdk
+          meson setup build -Denable_apps='test-pmd'
+          meson install -C build
